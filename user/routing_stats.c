@@ -8,17 +8,10 @@
 #include "../common_kern_user.h"
 
 
+#define MAP_PATH "/sys/fs/bpf/rmap"
+
 int main(int argc, char* argv[]) {
-    const char* map_name = "routing_stats";
-
-    char map_path[32];
-    snprintf(map_path, sizeof(map_path), "/sys/fs/bpf/%s", map_name);
-
-    char cmd[64];
-    snprintf(cmd, sizeof(cmd), "bpftool map pin name %s %s", map_name, map_path);
-    system(cmd);
-
-    int fd = bpf_obj_get(map_path);
+    int fd = bpf_obj_get(MAP_PATH);
 
     if (fd < 0) {
         fprintf(stderr, "Error %d opening BPF object: %s\n", errno, strerror(errno));
@@ -51,9 +44,6 @@ int main(int argc, char* argv[]) {
 
         rc = bpf_map_get_next_key(fd, &key, &key);
     }
-
-    snprintf(cmd, sizeof(cmd), "rm %s", map_path);
-    system(cmd);
 
     return 0;
 }
