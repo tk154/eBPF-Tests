@@ -1,32 +1,34 @@
 #include <linux/bpf.h>
-#include <linux/in.h>
 #include <linux/if_ether.h>
 #include <linux/ip.h>
-#include <linux/icmp.h>		// AF_INET
 #include <linux/tcp.h>
 #include <linux/udp.h>
 
+#include <arpa/inet.h>
 #include <bpf/bpf_endian.h>
 #include <bpf/bpf_helpers.h>
 
-#include "common.h"
-#include "../common_kern_user.h"
+#include "common_xdp_tc.h"
+#include "../common_router.h"
+
+#define IPERF_PORT 5001
 
 struct {
 	__uint(type, BPF_MAP_TYPE_PERCPU_HASH);
 	__type(key, struct ip_pair);
 	__type(value, struct datarec);
-	__uint(max_entries, 32);
-} iperf_route_stats SEC(".maps");
+	__uint(max_entries, ROUT_STATS_MAP_MAX_ENTRIES);
+	__uint(pinning, LIBBPF_PIN_BY_NAME);
+} ROUT_STATS_MAP SEC(".maps");
 
 
 int save_iperf_packet_data(__u32 src, __u32 dst, __u64 bytes) {
     struct ip_pair key = { .src = src, .dst = dst };
 
-    struct datarec* rec = bpf_map_lookup_elem(&iperf_route_stats, &key);
+    struct datarec* rec = bpf_map_lookup_elem(&ROUT_STATS_MAP, &key);
     if (!rec) {
 		struct datarec new_rec = { .packets = 1, .bytes = bytes };
-		bpf_map_update_elem(&iperf_route_stats, &key, &new_rec, BPF_NOEXIST);
+		bpf_map_update_elem(&ROUT_STATS_MAP, &key, &new_rec, BPF_NOEXIST);
 	}
 	else {
 		rec->packets++;
@@ -70,7 +72,7 @@ int router_func(struct BPF_CTX* ctx) {
             if(tcph->doff * 4 < sizeof(*tcph))
                 return BPF_DROP;
 
-            if (bpf_ntohs(tcph->dest) == 5001)
+            if (bpf_ntohs(tcph->dest) == IPERF_PORT)
                 save_iperf_packet_data(iph->saddr, iph->daddr, data_end - data);
         }
         else if (iph->protocol == IPPROTO_UDP) {
@@ -81,7 +83,7 @@ int router_func(struct BPF_CTX* ctx) {
             if (bpf_ntohs(udph->len) < sizeof(*udph))
                 return BPF_DROP;
 
-            if (bpf_ntohs(udph->dest) == 5001)
+            if (bpf_ntohs(udph->dest) == IPERF_PORT)
                 save_iperf_packet_data(iph->saddr, iph->daddr, data_end - data);
         }
 

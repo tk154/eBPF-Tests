@@ -5,14 +5,8 @@
 #include <bpf/bpf_endian.h>
 #include <bpf/bpf_helpers.h>
 
-#include "common.h"
+#include "common_xdp_tc.h"
 
-/*int ipaddr_equal(__be32 addr, __u8 b3, __u8 b2, __u8 b1, __u8 b0) {
-    return (addr >> 24)         == b0 &&
-          ((addr >> 16) & 0xFF) == b1 &&
-          ((addr >>  8) & 0xFF) == b2 &&
-           (addr        & 0xFF) == b3;
-}*/
 
 #define SRC_ADDR (192 | 168 << 8 | 1 << 16 | 2 << 24)
 #define DST_ADDR (192 | 168 << 8 | 2 << 16 | 2 << 24)

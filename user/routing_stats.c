@@ -1,20 +1,19 @@
 #include <errno.h>
-#include <stdlib.h>
 
 #include <arpa/inet.h>
-#include <bpf/libbpf.h>
 #include <bpf/bpf.h>
+#include <bpf/libbpf.h>
 
-#include "../common_kern_user.h"
+#include "../common_router.h"
 
-
-#define MAP_PATH "/sys/fs/bpf/rmap"
 
 int main(int argc, char* argv[]) {
-    int fd = bpf_obj_get(MAP_PATH);
+    char map_path[32];
+    snprintf(map_path, sizeof(map_path), "/sys/fs/bpf/%s", MAP_TO_STRING(ROUT_STATS_MAP));
 
+    int fd = bpf_obj_get(map_path);
     if (fd < 0) {
-        fprintf(stderr, "Error %d opening BPF object: %s\n", errno, strerror(errno));
+        fprintf(stderr, "Error %d opening BPF object %s: %s\n", errno, map_path, strerror(errno));
         return 1;
     }
 
