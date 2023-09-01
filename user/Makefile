@@ -1,4 +1,4 @@
-include OpenWrt.mk
+include common/OpenWrt.mk
 
 LDLIBS := -lbpf -lelf -lz
 
