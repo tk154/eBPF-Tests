@@ -2,13 +2,13 @@
 The kernel programs for both hooks are written in C code and afterward compiled into BPF objects.
 The entry point for a BPF program is a function marked by the SEC("&lt;section name&gt;") macro found inside <bpf/bpf_helpers.h>. The return value of this function determines what to do with the received package, for example, if it should be passed or dropped. The programs for both hooks have the same logic inside their function bodies; the only things changing are:
   1. The parameter passed to the entry point function is in the case of XDP a raw xdp_md and for TC the allocated __sk_buf struct
-  2. The return value which is defined by several macros is different e.g. for letting a packet pass there is XDP_PASS and TC_ACT_OK respectively (both also hold different integer values)
+  2. The return value which is defined by several macros is different e.g. for letting a packet pass there are XDP_PASS and TC_ACT_OK respectively (both also hold different integer values)
   3. Since the SKB buffer is available for TC programs it can be used to e.g. access already-processed VLAN metadata which have to be processed manually in an XDP program
 <br>
 
-Therefore the source code of a program inside this repository is written for both BPF hooks. The Makefile will set the macro XDP_PROGRAM and TC_PROGRAM respectively depending on which target has been selected when compiling the source files. The "common.h" header file will use those macros to select the appropriate packet struct and return values. A TC program can also use that macro to access a field inside its SKB buffer which is not available inside the XDP buffer.
+Therefore the source code of a program inside this repository is written for both BPF hooks. The Makefile will set the macro XDP_PROGRAM and TC_PROGRAM respectively depending on which target has been selected when compiling the source files. The "common_xdp_tc.h" header file will use those macros to select the appropriate packet struct and return values. A TC program can also use that macro to access a field inside its SKB buffer which is not available inside the XDP buffer.
 <br><br>
-The macros defined in "common.h" for the BPF programs hold the following values:
+The macros defined in "common_xdp_tc.h" for the BPF programs hold the following values:
 <br>
 
 <table>
@@ -66,5 +66,37 @@ Currently, the Makefile contains the following targets:
   <tr>
     <td>clean</td>
     <td>Deletes all compiled BPF object files by deleting the obj folder</td>
+  </tr>
+</table>
+<br>
+
+For now, there are the following kernel programs:
+<br>
+
+<table>
+  <tr>
+    <th>Program/Section name</th>
+    <th>C source code file</th>
+    <th>Description</th>
+  </tr>
+  <tr>
+    <td>forward</td>
+    <td>forward.c</td>
+    <td></td>
+  </tr>
+  <tr>
+    <td>router</td>
+    <td>router.c</td>
+    <td></td>
+  </tr>
+  <tr>
+    <td>router_iperf</td>
+    <td>router_iperf.c</td>
+    <td></td>
+  </tr>
+  <tr>
+    <td>router_firewall</td>
+    <td>router_firewall.c</td>
+    <td></td>
   </tr>
 </table>
