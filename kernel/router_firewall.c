@@ -3,6 +3,9 @@
 #include <linux/ip.h>
 #include <arpa/inet.h>
 
+#include <linux/tcp.h>
+#include <linux/udp.h>
+
 #include <bpf/bpf_endian.h>
 #include <bpf/bpf_helpers.h>
 
@@ -139,64 +142,63 @@ int router_firewall_func(struct BPF_CTX *ctx) {
 	// A pointer to save the cuurent position inside the package
 	void* p = data;
 
-	// Save the Ethernet header, make an out-of-bounds check, drop the package on failure
-	struct ethhdr* eth = p;
-	int hdrsize = sizeof(*eth);
-    if (p + hdrsize > data_end) {
-		BPF_DEBUG("DROP: eth hdrsize > data_end");
-		return BPF_DROP;
-	}
+	// Parse the Ethernet header, will drop the package if out-of-bounds
+	parse_header(struct ethhdr, *ethh, p, data_end);
 
-	// Save the packet type ID, move on the pointer
-    __be16 h_proto = eth->h_proto;
-	p += hdrsize;
-
+	// Save the packet type ID, default to no VLAN ID
+    __be16 h_proto = ethh->h_proto;
     __u16 vlan_id = 0;
 
 	// Check if there is a VLAN header
     if (h_proto == bpf_htons(ETH_P_8021Q) || h_proto == bpf_htons(ETH_P_8021AD)) {
-		// Save the VLAN header, make an out-of-bounds check, drop the package on failure
-        struct vlan_hdr* vlh = p;
-        hdrsize = sizeof(*vlh);
-        if (p + hdrsize > data_end) {
-			BPF_DEBUG("DROP: vlan hdrsize > data_end");
-            return BPF_DROP;
-		}
+		// Parse the VLAN header, will drop the package if out-of-bounds
+		parse_header(struct vlan_hdr, *vlan_h, p, data_end);
 
 		// Save the VLAN ID (last 12 Byte)
-        vlan_id = bpf_htons(vlh->h_vlan_TCI) & 0x0FFF;
+        vlan_id = bpf_htons(vlan_h->h_vlan_TCI) & 0x0FFF;
 		BPF_DEBUG("VLAN ID: %d", vlan_id);
 
-		// Save the packet type ID of the next header, move on the pointer
-		h_proto = vlh->h_vlan_encapsulated_proto;
-        p += hdrsize;
+		// Save the packet type ID of the next header
+		h_proto = vlan_h->h_vlan_encapsulated_proto;
     }
 
 	// If an IPv4 package has been received
 	if (h_proto == bpf_htons(ETH_P_IP)) {
-		// Save the IPv4 header, make an out-of-bounds check, drop the package on failure
-		struct iphdr* iph = p;
-		hdrsize = sizeof(*iph);
-		if (p + hdrsize > data_end) {
-			BPF_DEBUG("DROP: ip hdrsize > data_end");
-			return BPF_DROP;
-		}
+		// Parse the IPv4 header, will drop the package if out-of-bounds
+		parse_header(struct iphdr, *iph, p, data_end);
 
 		BPF_DEBUG_IP("Source IP: ", iph->saddr);
 		BPF_DEBUG_IP("Destination IP: ", iph->daddr);
 
-		// Drop the package if the TTL is exceeded
+		// Pass the package if the TTL is exceeded
 		if (iph->ttl <= 1) {
-			BPF_DEBUG("PASS: Time to live exceeded");
-			return BPF_DROP;
+			BPF_DEBUG("Time to live exceeded");
+			return BPF_PASS;
 		}
+
+		// Save the source and destination port if there is a TCP or UDP header
+		__be16 sport = 0, dport = 0;
+        if (iph->protocol == IPPROTO_TCP) {
+			// Parse the TCP header, will drop the package if out-of-bounds
+            parse_header(struct tcphdr, *tcph, p, data_end);
+
+            sport = tcph->source;
+			dport = tcph->dest;
+        }
+        else if (iph->protocol == IPPROTO_UDP) {
+			// Parse the UDP header, will drop the package if out-of-bounds
+            parse_header(struct udphdr, *udph, p, data_end);
+
+			sport = udph->source;
+			dport = udph->dest;
+        }
 
 		// Do a FIB loopkup in the kernel tables
 		struct bpf_fib_lookup fib_params = {};
 		fib_params.family = AF_INET;
 		fib_params.l4_protocol = iph->protocol;
-		fib_params.sport = 0;
-		fib_params.dport = 0;
+		fib_params.sport = sport;
+		fib_params.dport = dport;
 		fib_params.tot_len = bpf_ntohs(iph->tot_len);
 		fib_params.tos = iph->tos;
 		fib_params.ipv4_src = iph->saddr;
@@ -210,13 +212,13 @@ int router_firewall_func(struct BPF_CTX *ctx) {
 			case BPF_FIB_LKUP_RET_SUCCESS:      // lookup successful
 				// Drop the package if its VLAN doesn't match with the one from incoming or outgoing interface
 				if (!isVlanMatch(ctx->ingress_ifindex, vlan_id) || !isVlanMatch(fib_params.ifindex, vlan_id)) {
-					BPF_DEBUG("DROP: VLANs don't match");
+					BPF_DEBUG("VLANs don't match");
 					return BPF_DROP;
 				}
 
 				// Drop the package if the incoming interface doesn't allow forwarding or if the outgoing doesn't allow to send packages
                 if (!isAllowed(ctx->ingress_ifindex, IF_ACCEPT_FORWARD) || !isAllowed(fib_params.ifindex, IF_ACCEPT_OUTPUT)) {
-					BPF_DEBUG("DROP: Rule doesn't allow it");
+					BPF_DEBUG("Rule doesn't allow forwarding");
                     return BPF_DROP;
 				}
 
@@ -224,8 +226,8 @@ int router_firewall_func(struct BPF_CTX *ctx) {
 				save_packet_data(iph->saddr, iph->daddr, data_end - data);
 
 				// Set the new MAC adresses inside the package
-				memcpy(eth->h_source, fib_params.smac, ETH_ALEN);
-				memcpy(eth->h_dest, fib_params.dmac, ETH_ALEN);
+				memcpy(ethh->h_source, fib_params.smac, ETH_ALEN);
+				memcpy(ethh->h_dest, fib_params.dmac, ETH_ALEN);
 
 				// Decrement the TTL, adjust the checksum
 				iph->ttl--;
@@ -246,19 +248,17 @@ int router_firewall_func(struct BPF_CTX *ctx) {
 			case BPF_FIB_LKUP_RET_FRAG_NEEDED:  // fragmentation required to fwd
 				// Drop the package if its VLAN doesn't match with the one from the interface
 				if (!isVlanMatch(ctx->ingress_ifindex, vlan_id)) {
-					BPF_DEBUG("DROP: VLANs don't match");
+					BPF_DEBUG("VLANs don't match");
 					return BPF_DROP;
 				}
 
 				// Drop the package if the interface is not allowed to receive packages
                 if (!isAllowed(ctx->ingress_ifindex, IF_ACCEPT_INPUT)) {
-					BPF_DEBUG("DROP: Rule doesn't allow it");
+					BPF_DEBUG("Rule doesn't allow input");
                     return BPF_DROP;
 				}
 		}
 	}
-
-	BPF_DEBUG("PASS");
 
 	// Let the package pass if it is allowed to or it doesn't have an IPv4 header
     return BPF_PASS;

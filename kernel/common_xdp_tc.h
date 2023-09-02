@@ -39,4 +39,13 @@
 #endif
 #define BPF_DEBUG_IP(s, ip) BPF_DEBUG("%s%u.%u.%u.%u", s, ip & 0xFF, (ip >> 8) & 0xFF, (ip >> 16) & 0xFF, ip >> 24);
 
+// Helper macro to make the out-of-bounds check on a packet header and drop the package on failure
+#define parse_header(header_type, header_ptr, data_ptr, data_end) \
+    header_type header_ptr = data_ptr; \
+	data_ptr += sizeof(header_type); \
+    if (data_ptr > data_end) { \
+        BPF_DEBUG(#header_type" > data_end"); \
+        return BPF_DROP; \
+    }
+
 #endif

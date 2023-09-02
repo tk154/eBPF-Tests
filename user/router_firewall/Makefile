@@ -15,10 +15,10 @@ $(TARGET): main.c $(OBJECTS) | $(OUT_DIR)
 	$(CC) $(CFLAGS) $^ -o $@ $(LDFLAGS) $(LDLIBS)
 
 $(OUT_DIR)/%.o: %.c | $(OUT_DIR)
-	$(CC) $(CFLAGS) -c $< -o $@ $(LDFLAGS) $(LDLIBS)
+	$(CC) $(CFLAGS) -c $< -o $@ $(LDFLAGS)
 
 $(BPF_LOADER_OBJECT): $(BPF_LOADER_SOURCE) | $(OUT_DIR)
-	$(CC) $(CFLAGS) -c $< -o $@ $(LDFLAGS) $(LDLIBS)
+	$(CC) $(CFLAGS) -c $< -o $@ $(LDFLAGS)
 
 $(OUT_DIR):
 	@mkdir $(OUT_DIR)
