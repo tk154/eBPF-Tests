@@ -82,21 +82,21 @@ For now, there are the following kernel programs:
   <tr>
     <td>forward</td>
     <td>forward.c</td>
-    <td></td>
+    <td>Only forwards packages from a source IPv4 address SRC_ADDR to a destination IPv4 address DST_ADDR by using the helper function bpf_redirect to redirect them manually to another interface. The egress interface index IFINDEX, mac address IF_MAC, and mac address of the destination DST_MAC must be also set manually.</td>
   </tr>
   <tr>
     <td>router</td>
     <td>router.c</td>
-    <td></td>
+    <td>Redirects all incoming IPv4 packages to another network interface, if possible. Uses the BPF helper function bpf_fib_lookup to determine the next hop. Depending on the return code of bpf_fib_lookup, the package might also be passed to the kernel or dropped. When a package is being redirected, its number of Bytes and the source and destination address are saved inside the rout_stats_map map which can be read by the user-space program routing_stats.</td>
   </tr>
   <tr>
     <td>router_iperf</td>
     <td>router_iperf.c</td>
-    <td></td>
+    <td>Similar to the router program but only packages destined to the default iperf port (5001 TCP and UDP) are saved inside the rout_stats_map map.</td>
   </tr>
   <tr>
     <td>router_firewall</td>
     <td>router_firewall.c</td>
-    <td></td>
+    <td>Is similar to the router program but it checks if the VLAN of the incoming package and interface(s) matches by reading from the if_vlans_map map and if the incoming package is allowed to be received, sent, and redirected on the interface(s) by reading from the if_rules_map map. Both maps are written by the user-space program router_firewall hence this program should be loaded by it.</td>
   </tr>
 </table>
