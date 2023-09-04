@@ -12,7 +12,7 @@
 #include "../../common_router_firewall.h"
 
 // Currently the uci command of OpenWrt is used to retrieve the zone rules from /etc/config/firewall
-// Becuase of the sed command the output looks like: ZONE_INDEX,OPTION,VALUE1(,VALUE2)...
+// Because of the sed command the output looks like: ZONE_INDEX,OPTION,VALUE1(,VALUE2)...
 // The sed command has a bug since it only prints max. two interfaces (the fist and last) for a zone
 #define UCI_ZONE_RULES_CMD "uci show firewall | sed -nE \"s/.*zone\\[(\\d+)\\]\\.(\\w+)='(\\w+)'(\\s'(\\w+)')*/\\1,\\2,\\3,\\5/p\""
 
@@ -28,13 +28,13 @@ int firewall_add_rule(int map_fd, char* ifname, __u8 rule) {
     // Try to get the interface index from the interface name
     unsigned int ifindex = if_nametoindex(ifname);
     if (ifindex == 0) {
-        fprintf(stderr, "Error %d finding network interface %s: %s\n", errno, ifname, strerror(errno));
+        fprintf(stderr, "Firewall Warning: Cannot find network interface %s: %s (Code: -%d)\n", ifname, strerror(errno), errno);
         return errno;
     }
 
     // Try to add the rule to the interface, a rule for the interface shouldn't already exist inside map
     if (bpf_map_update_elem(map_fd, &ifindex, &rule, BPF_NOEXIST) != 0) {
-        fprintf(stderr, "Error %d adding firewall rule to %s: %s\n", errno, ifname, strerror(errno));
+        fprintf(stderr, "Firewall Error: Cannot add rule to %s: %s (Code: -%d)\n", ifname, strerror(errno), errno);
         return errno;
     }
 
