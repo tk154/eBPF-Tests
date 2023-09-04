@@ -110,9 +110,9 @@ int isVlanMatch(unsigned int ifindex, __u16 packet_vlan) {
 }
 
 /**
- * Check the interface rules map if the to-be-executed package operation is allowed
+ * Check the interface rules map if the to-be-executed package operation(s) is allowed
  * @param ifindex The index of the to-be-checked rule
- * @param rule The Bitmask of the to-be-executed operation
+ * @param rule The Bitmask of the to-be-executed operation(s)
  * @returns 1 if the operations is allowed, 0 otherwise
 **/
 int isAllowed(unsigned int ifindex, if_rule rule) {
@@ -121,8 +121,8 @@ int isAllowed(unsigned int ifindex, if_rule rule) {
     if (firewall_rule == NULL)
         return 0;
 
-	// Check if the Bit is set
-    return *firewall_rule & rule;
+	// Check if all the Bits are set
+    return (*firewall_rule & rule) == rule;
 }
 
 
@@ -209,7 +209,7 @@ int router_firewall_func(struct BPF_CTX *ctx) {
 		BPF_DEBUG("bpf_fib_lookup: %d", fib_lookup_rc);
 
 		switch (fib_lookup_rc) { 
-			case BPF_FIB_LKUP_RET_SUCCESS:      // lookup successful
+			case BPF_FIB_LKUP_RET_SUCCESS:
 				// Drop the package if its VLAN doesn't match with the one from incoming or outgoing interface
 				if (!isVlanMatch(ctx->ingress_ifindex, vlan_id) || !isVlanMatch(fib_params.ifindex, vlan_id)) {
 					BPF_DEBUG("VLANs don't match");
@@ -236,16 +236,16 @@ int router_firewall_func(struct BPF_CTX *ctx) {
 				// Redirect the package to the interface
 				return bpf_redirect(fib_params.ifindex, 0);
 
-			case BPF_FIB_LKUP_RET_BLACKHOLE:    // dest is blackholed; can be dropped 
-			case BPF_FIB_LKUP_RET_UNREACHABLE:  // dest is unreachable; can be dropped 
-			case BPF_FIB_LKUP_RET_PROHIBIT:     // dest not allowed; can be dropped 
+			case BPF_FIB_LKUP_RET_BLACKHOLE:  
+			case BPF_FIB_LKUP_RET_UNREACHABLE:
+			case BPF_FIB_LKUP_RET_PROHIBIT:   
 				return BPF_DROP;
 
-			case BPF_FIB_LKUP_RET_NOT_FWDED:    // packet is not forwarded 
-			case BPF_FIB_LKUP_RET_FWD_DISABLED: // fwding is not enabled on ingress 
-			case BPF_FIB_LKUP_RET_UNSUPP_LWT:   // fwd requires encapsulation 
-			case BPF_FIB_LKUP_RET_NO_NEIGH:     // no neighbor entry for nh 
-			case BPF_FIB_LKUP_RET_FRAG_NEEDED:  // fragmentation required to fwd
+			case BPF_FIB_LKUP_RET_NOT_FWDED:   
+			case BPF_FIB_LKUP_RET_FWD_DISABLED:
+			case BPF_FIB_LKUP_RET_UNSUPP_LWT:  
+			case BPF_FIB_LKUP_RET_NO_NEIGH:    
+			case BPF_FIB_LKUP_RET_FRAG_NEEDED: 
 				// Drop the package if its VLAN doesn't match with the one from the interface
 				if (!isVlanMatch(ctx->ingress_ifindex, vlan_id)) {
 					BPF_DEBUG("VLANs don't match");
