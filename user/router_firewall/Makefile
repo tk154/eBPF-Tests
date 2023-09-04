@@ -1,4 +1,6 @@
+ifdef OPENWRT_DIR
 include ../common/OpenWrt.mk
+endif
 
 LDLIBS := -lbpf -lelf -lz
 
@@ -15,10 +17,10 @@ $(TARGET): main.c $(OBJECTS) | $(OUT_DIR)
 	$(CC) $(CFLAGS) $^ -o $@ $(LDFLAGS) $(LDLIBS)
 
 $(OUT_DIR)/%.o: %.c | $(OUT_DIR)
-	$(CC) $(CFLAGS) -c $< -o $@ $(LDFLAGS)
+	$(CC) $(CFLAGS) -c $< -o $@
 
 $(BPF_LOADER_OBJECT): $(BPF_LOADER_SOURCE) | $(OUT_DIR)
-	$(CC) $(CFLAGS) -c $< -o $@ $(LDFLAGS)
+	$(CC) $(CFLAGS) -c $< -o $@
 
 $(OUT_DIR):
 	@mkdir $(OUT_DIR)

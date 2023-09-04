@@ -4,7 +4,7 @@
 #include <bpf/bpf.h>
 #include <bpf/libbpf.h>
 
-#include "../common_router.h"
+#include "../../common_router.h"
 
 
 int main(int argc, char* argv[]) {
