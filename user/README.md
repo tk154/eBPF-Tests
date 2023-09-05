@@ -19,4 +19,6 @@ After it has finished filling the maps, it will try to attach the router_firewal
 Successfully loaded BPF program. Press CTRL+C to unload</pre>
 <br>
 
-When the user enters CTRL+C now, it will detach the BPF program from the interfaces and unload it from the kernel.
+When the user enters CTRL+C now, it will detach the BPF program from the interfaces and unload it from the kernel. The following picture shows the sequence diagram of the program:
+<br><br>
+<img src="https://github.com/tk154/eBPF-Tests/blob/main/pictures/user_router_firewall.vpd.png">
