@@ -1,10 +1,12 @@
 #ifndef BPF_LOADER_H
 #define BPF_LOADER_H
 
+#include <linux/bpf.h>
+
 
 // Struct to keep BPF object and program pointers together
 struct bpf_object_program {
-    struct bpf_object* obj;     // BPF object pointer
+    struct bpf_object*  obj;    // BPF object pointer
     struct bpf_program* prog;   // BPF program pointer
 };
 
@@ -12,11 +14,10 @@ struct bpf_object_program {
 /**
  * Load a BPF object including its map and program into the kernel
  * @param prog_path Path to the BPF object
- * @param prog_name Name of the program to be loaded into the kernel
  * @param prog_type Can be either BPF_PROG_TYPE_XDP for XDP or BPF_PROG_TYPE_SCHED_CLS for TC programs
  * @returns On success, a pointer to a dynamically allocated bpf_object_program struct, NULL otherwise
 **/
-struct bpf_object_program* bpf_load_program(char* prog_path, char* prog_name, enum bpf_prog_type prog_type);
+struct bpf_object_program* bpf_load_program(const char* prog_path, enum bpf_prog_type prog_type);
 
 /**
  * Unload a BPF object including its map and program from the kernel
@@ -70,5 +71,6 @@ int bpf_attach_program(struct bpf_program* prog);
  * @returns 0 on success, errno if the network interfaces couldn't be retrieved
  * **/
 int bpf_detach_program(struct bpf_program* prog);
+
 
 #endif

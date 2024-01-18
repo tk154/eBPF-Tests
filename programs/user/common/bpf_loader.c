@@ -1,13 +1,18 @@
+#include "bpf_loader.h"
+
 #include <errno.h>
+#include <glob.h>
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
 
-#include <bpf/libbpf.h>
 #include <net/if.h>
 #include <linux/if_link.h>
 
-#include "bpf_loader.h"
+#include <bpf/bpf.h>
+#include <bpf/libbpf.h>
+
 
 // For now, attach XDP programs in SKB/Generic mode
 #define XDP_ATTACH_FLAGS XDP_FLAGS_SKB_MODE
@@ -16,9 +21,9 @@
 /**
  * Used to check if a network interface is virtual
  * @param ifname Name of the network interface
- * @returns 1 if it is a virtual interface, 0 if it is physical
+ * @returns true if it is a virtual interface, false if it is physical
  * **/
-int if_is_virtual(char* ifname) {
+static bool if_is_virtual(char* ifname) {
     char path[64];
     snprintf(path, sizeof(path), "/sys/class/net/%s/device", ifname);
 
@@ -26,20 +31,37 @@ int if_is_virtual(char* ifname) {
     return access(path, F_OK) != 0;
 }
 
-struct bpf_object_program* bpf_load_program(char* prog_path, char* prog_name, enum bpf_prog_type prog_type) {
+/**
+ * Used to check if a network interface has a lower one (i.e. is upper)
+ * @param ifname Name of the network interface
+ * @returns true if it is a lower interface, false if not
+ * **/
+static bool if_has_lower(char* ifname) {
+    char path[64];
+    snprintf(path, sizeof(path), "/sys/class/net/%s/lower_*", ifname);
+
+    glob_t globbuf;
+    glob(path, 0, NULL, &globbuf);
+
+    size_t lower_count = globbuf.gl_pathc;
+    globfree(&globbuf);
+
+    return lower_count != 0;
+}
+
+struct bpf_object_program* bpf_load_program(const char* prog_path, enum bpf_prog_type prog_type) {
     struct bpf_object_program* bpf = (struct bpf_object_program*)malloc(sizeof(struct bpf_object_program));
 
     // Try to open the BPF object file, return on error
     bpf->obj = bpf_object__open_file(prog_path, NULL);
     if (!bpf->obj) {
-        fprintf(stderr, "Error %d opening BPF object file: %s\n", errno, strerror(errno));
+        fprintf(stderr, "Error opening BPF object file: %s (-%d).\n", strerror(errno), errno);
         goto error;
     }
 
-    // Try to find the program inside the object file, return on error
-    bpf->prog = bpf_object__find_program_by_name(bpf->obj, prog_name);
+    bpf->prog = bpf_object__next_program(bpf->obj, NULL);
     if (!bpf->prog) {
-        fprintf(stderr, "Couldn't find program %s in %s\n", prog_name, prog_path);
+        fprintf(stderr, "Couldn't find a BPF program in %s.\n", prog_path);
         goto bpf_object__close;
     }
     
@@ -47,7 +69,7 @@ struct bpf_object_program* bpf_load_program(char* prog_path, char* prog_name, en
 
     // Try to load the BPF object into the kernel, return on error
     if (bpf_object__load(bpf->obj) != 0) {
-        fprintf(stderr, "Error %d loading BPF program into kernel: %s\n", errno, strerror(errno));
+        fprintf(stderr, "Error loading BPF program into kernel: %s (-%d).\n", strerror(errno), errno);
         goto bpf_object__close;
     }
 
@@ -74,7 +96,7 @@ int bpf_if_attach_program(struct bpf_program* prog, char* ifname) {
     // Get the interface index from the interface name
     unsigned int ifindex = if_nametoindex(ifname);
     if (ifindex == 0) {
-        fprintf(stderr, "Error %d finding network interface %s: %s\n", errno, ifname, strerror(errno));
+        fprintf(stderr, "Error finding network interface %s: %s (-%d).\n", ifname, strerror(errno), errno);
         return errno;
     }
     
@@ -83,7 +105,7 @@ int bpf_if_attach_program(struct bpf_program* prog, char* ifname) {
         case BPF_PROG_TYPE_XDP:
             // Attach the program to the XDP hook
             if (bpf_xdp_attach(ifindex, bpf_program__fd(prog), XDP_ATTACH_FLAGS, NULL) != 0) {
-                fprintf(stderr, "Error %d attaching XDP program: %s\n", errno, strerror(errno));
+                fprintf(stderr, "Error attaching XDP program: %s (-%d).\n", strerror(errno), errno);
                 return errno;
             }
         break;
@@ -98,13 +120,13 @@ int bpf_if_attach_program(struct bpf_program* prog, char* ifname) {
             if (rc == -EEXIST)
                 fprintf(stderr, "TC hook already exists on %s. You can ignore the kernel error message.\n\n", ifname);
             else if (rc != 0) {
-                fprintf(stderr, "Error %d creating TC hook: %s\n", errno, strerror(errno));
+                fprintf(stderr, "Error creating TC hook: %s (-%d).\n", strerror(errno), errno);
                 return errno;
             }
 
             // Attach the TC prgram to the created hook
             if (bpf_tc_attach(&hook, &opts) != 0) {
-                fprintf(stderr, "Error %d attaching TC program on %s: %s\n", errno, ifname, strerror(errno));
+                fprintf(stderr, "Error attaching TC program on %s: %s (-%d).\n", ifname, strerror(errno), errno);
                 hook.attach_point |= BPF_TC_EGRESS;
                 bpf_tc_hook_destroy(&hook);
 
@@ -125,7 +147,7 @@ void bpf_if_detach_program(struct bpf_program* prog, char* ifname) {
     // Get the interface index from the interface name
     unsigned int ifindex = if_nametoindex(ifname);
     if (ifindex == 0) {
-        fprintf(stderr, "Error %d finding network interface %s: %s\n", errno, ifname, strerror(errno));
+        fprintf(stderr, "Error finding network interface %s: %s (-%d).\n", ifname, strerror(errno), errno);
         return;
     }
 
@@ -143,7 +165,7 @@ void bpf_if_detach_program(struct bpf_program* prog, char* ifname) {
             /* It should be possible to detach the TC program from the hook, 
                check the hook if there is still another program attached to it
                and destroy the hook if not, but bpf_tc_detach always returns Invalid argument(-22)
-               which means that TC programs cannot be detached so for now just destroy the hook
+               which means that TC programs cannot be detached, so for now just destroy the hook
                although there might be other programs attached to it */
             //printf("detach: %d\n", bpf_tc_detach(&hook, &opts));
 
@@ -186,14 +208,14 @@ int bpf_attach_program(struct bpf_program* prog) {
     // Retrieve the name and index of all network interfaces
     struct if_nameindex* ifaces = if_nameindex();
     if (ifaces == NULL) {
-        fprintf(stderr, "Error %d retrieving network interfaces: %s\n", errno, strerror(errno));
+        fprintf(stderr, "Error retrieving network interfaces: %s (-%d).\n", strerror(errno), errno);
         return errno;
     }
 
     int rc = 0;
     for (struct if_nameindex* iface = ifaces; iface->if_index != 0 && iface->if_name != NULL; iface++) {
-        // Check if the device is not a virtual one
-        if (!if_is_virtual(iface->if_name)) {
+        // Check if the device is not virtual and doesn't have a lower one
+        if (!if_is_virtual(iface->if_name) && !if_has_lower(iface->if_name)) {
             rc = bpf_if_attach_program(prog, iface->if_name);
 
             if (rc != 0) {
@@ -208,6 +230,7 @@ int bpf_attach_program(struct bpf_program* prog) {
 
     // Retrieved interfaces are dynamically allocated, so they must be freed
     if_freenameindex(ifaces);
+    
     return rc;
 }
 
@@ -215,16 +238,17 @@ int bpf_detach_program(struct bpf_program* prog) {
     // Retrieve the name and index of all network interfaces
     struct if_nameindex* ifaces = if_nameindex();
     if (ifaces == NULL) {
-        fprintf(stderr, "Error %d retrieving network interfaces: %s\n", errno, strerror(errno));
+        fprintf(stderr, "Error retrieving network interfaces: %s (-%d).\n", strerror(errno), errno);
         return errno;
     }
 
     for (struct if_nameindex* iface = ifaces; iface->if_index != 0 && iface->if_name != NULL; iface++)
-        // Check if the device is not a virtual one
-        if (!if_is_virtual(iface->if_name))
+        // Check if the device is not virtual and doesn't have a lower one
+        if (!if_is_virtual(iface->if_name) && !if_has_lower(iface->if_name))
             bpf_if_detach_program(prog, iface->if_name);
 
     // Retrieved interfaces are dynamically allocated, so they must be freed
     if_freenameindex(ifaces);
+
     return 0;
 }
