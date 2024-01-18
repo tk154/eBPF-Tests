@@ -6,11 +6,13 @@
 #include <bpf/bpf_endian.h>
 #include <bpf/bpf_helpers.h>
 
+#define DEBUG 1
 #include "common_xdp_tc.h"
 #include "../common_router.h"
 
+
 struct {
-	__uint(type, BPF_MAP_TYPE_PERCPU_HASH);
+	__uint(type, BPF_MAP_TYPE_LRU_PERCPU_HASH);
 	__type(key, struct ip_pair);
 	__type(value, struct datarec);
 	__uint(max_entries, ROUT_STATS_MAP_MAX_ENTRIES);
@@ -37,24 +39,16 @@ int save_packet_data(__u32 src, __u32 dst, __u64 bytes) {
 
 SEC("router")
 int router_func(struct BPF_CTX *ctx) {
-	void *data = (void *)(long)ctx->data;
-	void *data_end = (void *)(long)ctx->data_end;
+	BPF_DEBUG("---------- New package received ----------");
+
+	void* data 	   = (void*)(long)ctx->data;
+	void* data_end = (void*)(long)ctx->data_end;
 
 	void* p = data;
-
-	struct ethhdr* eth = p;
-	int hdrsize = sizeof(*eth);
-    if (p + hdrsize > data_end)
-		return BPF_DROP;
-
-	p += hdrsize;
+	parse_header(struct ethhdr, *eth, p, data_end);
 
 	if (eth->h_proto == bpf_htons(ETH_P_IP)) {
-		struct iphdr* iph = p;
-		hdrsize = sizeof(*iph);
-
-		if (p + hdrsize > data_end)
-			return BPF_DROP;
+		parse_header(struct iphdr, *iph, p, data_end);
 
 		if (iph->ttl <= 1)
 			return BPF_PASS;
@@ -72,10 +66,14 @@ int router_func(struct BPF_CTX *ctx) {
 
 		int rc = bpf_fib_lookup(ctx, &fib_params, sizeof(fib_params), 0);
 		//bpf_printk("bpf_fib_lookup: %d", rc);
+		BPF_DEBUG("bpf_fib_lookup: %d", rc);
+		BPF_DEBUG("ifindex: %d", fib_params.ifindex);
+
+		save_packet_data(iph->saddr, iph->daddr, data_end - data);
 
 		switch (rc) { 
 			case BPF_FIB_LKUP_RET_SUCCESS:      // lookup successful
-				save_packet_data(iph->saddr, iph->daddr, data_end - data);
+				//save_packet_data(iph->saddr, iph->daddr, data_end - data);
 
 				memcpy(eth->h_source, fib_params.smac, ETH_ALEN);
 				memcpy(eth->h_dest, fib_params.dmac, ETH_ALEN);

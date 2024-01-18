@@ -8,7 +8,7 @@
 
 // rout_stats_map
 // Key is hash of src and dst IP pair
-#define ROUT_STATS_MAP              rout_stats_map  // Can be used to lookup how much packets and Bytes have been routed between a source and destination IP
+#define ROUT_STATS_MAP              rout_stats      // Can be used to lookup how much packets and Bytes have been routed between a source and destination IP
 #define ROUT_STATS_MAP_MAX_ENTRIES  16              // Max. entries of rout_stats_map
 
 struct ip_pair {                                    // Key for rout_stats_map
