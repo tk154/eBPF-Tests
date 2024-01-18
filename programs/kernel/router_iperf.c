@@ -9,7 +9,7 @@
 #include <bpf/bpf_helpers.h>
 
 #include "common_xdp_tc.h"
-#include "../common_router.h"
+#include "../common_router_stats.h"
 
 #define IPERF_PORT 5001
 

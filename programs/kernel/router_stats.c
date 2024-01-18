@@ -8,7 +8,7 @@
 
 #define DEBUG 1
 #include "common_xdp_tc.h"
-#include "../common_router.h"
+#include "../common_router_stats.h"
 
 
 struct {
@@ -65,7 +65,6 @@ int router_func(struct BPF_CTX *ctx) {
 		fib_params.ifindex = ctx->ingress_ifindex;
 
 		int rc = bpf_fib_lookup(ctx, &fib_params, sizeof(fib_params), 0);
-		//bpf_printk("bpf_fib_lookup: %d", rc);
 		BPF_DEBUG("bpf_fib_lookup: %d", rc);
 		BPF_DEBUG("ifindex: %d", fib_params.ifindex);
 
@@ -73,8 +72,6 @@ int router_func(struct BPF_CTX *ctx) {
 
 		switch (rc) { 
 			case BPF_FIB_LKUP_RET_SUCCESS:      // lookup successful
-				//save_packet_data(iph->saddr, iph->daddr, data_end - data);
-
 				memcpy(eth->h_source, fib_params.smac, ETH_ALEN);
 				memcpy(eth->h_dest, fib_params.dmac, ETH_ALEN);
 
