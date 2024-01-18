@@ -13,8 +13,8 @@ int main(int argc, char* argv[]) {
 
     int fd = bpf_obj_get(map_path);
     if (fd < 0) {
-        fprintf(stderr, "Error %d opening BPF object %s: %s\n", errno, map_path, strerror(errno));
-        return 1;
+        fprintf(stderr, "Error opening BPF object %s: %s (Code -%d)\n", map_path, strerror(errno), errno);
+        return errno;
     }
 
     int num_cpus = libbpf_num_possible_cpus();
