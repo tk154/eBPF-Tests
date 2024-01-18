@@ -17,15 +17,15 @@ enum {
 };
 
 struct rout_key {
-    __u32  ifindex;
-    __be32 src_ip, dst_ip;
+	__u32  ifindex;
+	__be32 src_ip, dst_ip;
 };
 
 struct rout_val {
-    __u32 ifindex;
-    __u8 src_mac[ETH_ALEN];
-    __u8 dst_mac[ETH_ALEN];
-    __u8 action;
+	__u32 ifindex;
+	__u8 src_mac[ETH_ALEN];
+	__u8 dst_mac[ETH_ALEN];
+	__u8 action;
 };
 
 struct {
@@ -77,7 +77,7 @@ __always_inline void make_routing_decision(struct BPF_CTX *ctx, struct iphdr* ip
 		case BPF_FIB_LKUP_RET_NO_NEIGH:     // no neighbor entry for nh
 		case BPF_FIB_LKUP_RET_FRAG_NEEDED:  // fragmentation required to fwd
 		default:
-            rt_val->action  = ACTION_PASS;
+			rt_val->action  = ACTION_PASS;
 	}
 }
 
@@ -115,39 +115,39 @@ int router_map(struct BPF_CTX *ctx) {
 		BPF_DEBUG_IP("Source IP: ", 	 iph->saddr);
 		BPF_DEBUG_IP("Destination IP: ", iph->daddr);
 
-        struct rout_key rt_key = {};
-        rt_key.ifindex = ctx->ingress_ifindex;
-        rt_key.src_ip  = iph->saddr;
-        rt_key.dst_ip  = iph->daddr;
+		struct rout_key rt_key = {};
+		rt_key.ifindex = ctx->ingress_ifindex;
+		rt_key.src_ip  = iph->saddr;
+		rt_key.dst_ip  = iph->daddr;
 
-        struct rout_val* rt_val = bpf_map_lookup_elem(&rt_map, &rt_key);
-        if (!rt_val) {
-            struct rout_val new_rt = {};
+		struct rout_val* rt_val = bpf_map_lookup_elem(&rt_map, &rt_key);
+		if (!rt_val) {
+			struct rout_val new_rt = {};
 
-            make_routing_decision(ctx, iph, &new_rt);
-            bpf_map_update_elem(&rt_map, &rt_key, &new_rt, BPF_NOEXIST);
+			make_routing_decision(ctx, iph, &new_rt);
+			bpf_map_update_elem(&rt_map, &rt_key, &new_rt, BPF_NOEXIST);
 			
-            rt_val = bpf_map_lookup_elem(&rt_map, &rt_key);
-            if (!rt_val)
-                return BPF_DROP;
-        }
+			rt_val = bpf_map_lookup_elem(&rt_map, &rt_key);
+			if (!rt_val)
+				return BPF_DROP;
+		}
 
-        switch (rt_val->action) {
-            case ACTION_REDIRECT:
-                if (iph->ttl <= 1)
-                    return BPF_PASS;
+		switch (rt_val->action) {
+			case ACTION_REDIRECT:
+				if (iph->ttl <= 1)
+					return BPF_PASS;
 
-                return redirect_package(ethh, iph, rt_val);
+				return redirect_package(ethh, iph, rt_val);
 
-            case ACTION_PASS:
-                return BPF_PASS;
+			case ACTION_PASS:
+				return BPF_PASS;
 
 			default:
 				return BPF_DROP;
-        }
+		}
 	}
 
-    return BPF_PASS;
+	return BPF_PASS;
 }
 
 char _license[] SEC("license") = "GPL";
